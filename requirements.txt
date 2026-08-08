@@ -1,4 +1,4 @@
-vieneu
+vieneu==3.2.4
 fastapi
 uvicorn[standard]
 requests
