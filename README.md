@@ -1,27 +1,28 @@
 # Local VieNeu TTS Service
 
-Dịch vụ TTS tiếng Việt chạy local bằng VieNeu-TTS. Model được nạp một lần và giữ thường trực trong RAM. Repo hiện có hai server độc lập:
+Dịch vụ TTS tiếng Việt chạy local bằng VieNeu-TTS. Model được nạp một lần và giữ thường trực trong RAM.
 
-- **TTS API** tại `127.0.0.1:8765` để sinh audio.
-- **Voice Library LAN** tại `0.0.0.0:8766` để mở trình duyệt trên điện thoại/PC khác, xem toàn bộ audio đã tạo và phát lại trực tiếp.
+Hệ thống hiện có 3 dịch vụ:
+
+- **TTS API** `127.0.0.1:8765` — tạo WAV và stream audio realtime.
+- **Voice Library LAN** `0.0.0.0:8766` — nghe lại audio đã tạo bằng trình duyệt.
+- **Live TTS Queue** `127.0.0.1:8770` — nhận text từ middleware/live, xếp hàng và phát loa realtime.
 
 Phiên bản VieNeu đang pin: `vieneu==3.2.4`.
 
 ## Thành phần
 
-- `tts_server.py` — server sinh TTS thường trực.
+- `tts_server.py` — TTS server thường trực; `POST /tts` và `POST /tts/stream`.
+- `live_tts.py` — hàng đợi realtime, nhận text và phát PCM stream ra loa.
 - `voice_library_server.py` — thư viện audio trên web cho mạng LAN.
 - `noi.py` — tạo nhanh một WAV; mặc định lưu vào `outputs\voice_<timestamp>.wav`.
-- `tao_truyen.py` — tạo truyện dài; mặc định lưu vào `outputs\truyen_<timestamp>.wav` và thư mục segment tương ứng.
-- `install_windows.bat` — tạo `.venv` và cài dependency.
+- `tao_truyen.py` — tạo truyện dài/multi-voice.
+- `voice_roles.json` — cấu hình voice cho `[NARRATOR]`, `[NAM]`, `[NU]`.
 - `start_tts.bat` — chạy TTS API.
-- `start_library.bat` — chạy Voice Library LAN.
-- `start_all.bat` — chạy cả hai server.
-- `test_tts.bat` — test nhanh TTS.
-- `allow_lan_firewall.bat` — mở TCP port 8766 trên Windows Firewall cho mạng Private; cần Run as administrator.
-- `install_autostart.bat` — tự chạy cả hai server khi đăng nhập Windows.
-- `remove_autostart.bat` — gỡ tự khởi động.
-- `examples/truyen_mau.txt` — truyện mẫu.
+- `start_library.bat` — chạy Voice Library.
+- `start_live_tts.bat` — chạy Live TTS Queue.
+- `start_all.bat` — chạy cả 3 dịch vụ.
+- `test_live_tts.bat` — gửi thử nhiều câu với priority khác nhau.
 
 ## Cài nhanh trên Windows
 
@@ -31,22 +32,117 @@ cd tts
 install_windows.bat
 ```
 
-Sau đó chạy cả hai server:
+Nếu repo đã cài từ trước và vừa `git pull`, cài thêm dependency mới:
+
+```cmd
+.venv\Scripts\python.exe -m pip install -r requirements.txt
+```
+
+Chạy toàn bộ:
 
 ```cmd
 start_all.bat
 ```
 
-Hoặc chạy riêng:
+Các cổng local:
+
+```text
+TTS API        http://127.0.0.1:8765
+Voice Library  http://127.0.0.1:8766
+Live TTS Queue http://127.0.0.1:8770
+```
+
+## Realtime TTS cho LIVE
+
+VieNeu sinh audio bằng `infer_stream()`. `tts_server.py` chuyển từng phần audio thành **mono PCM16 little-endian 48 kHz** và gửi ngay qua HTTP, không chờ tạo xong toàn bộ câu.
+
+### Stream trực tiếp
+
+Endpoint:
+
+```text
+POST http://127.0.0.1:8765/tts/stream
+```
+
+Body giống `/tts`:
+
+```json
+{
+  "text": "Cảm ơn bạn vừa follow!",
+  "voice": "Minh Đức",
+  "style": "tu_nhien",
+  "temperature": 0.78,
+  "top_k": 25,
+  "top_p": 0.93,
+  "max_chars": 180
+}
+```
+
+Response là raw PCM stream. Header quan trọng:
+
+```text
+X-TTS-Sample-Rate: 48000
+X-TTS-Channels: 1
+X-TTS-Format: s16le
+```
+
+### Cách dễ nhất cho middleware: Live TTS Queue
+
+Middleware không cần tự phát PCM. Chỉ cần POST text vào:
+
+```text
+POST http://127.0.0.1:8770/speak
+```
+
+Ví dụ CMD:
 
 ```cmd
-start_tts.bat
-start_library.bat
+curl -X POST http://127.0.0.1:8770/speak -H "Content-Type: application/json" -d "{\"text\":\"Cảm ơn bạn vừa follow!\",\"priority\":20,\"style\":\"tu_nhien\"}"
+```
+
+Queue sẽ:
+
+1. nhận text;
+2. xếp hàng theo `priority`;
+3. gọi `/tts/stream`;
+4. phát chunk đầu ngay khi nhận được;
+5. tiếp tục phát các chunk sau;
+6. đọc xong mới chuyển sang câu kế tiếp.
+
+**Câu đang phát không bị cắt ngang.** Priority chỉ sắp xếp các câu còn đang chờ.
+
+Gợi ý priority cho live:
+
+```text
+GIFT    = 10
+FOLLOW  = 20
+COMMENT = 50
+JOIN    = 80
+```
+
+Số nhỏ hơn được ưu tiên trước.
+
+Kiểm tra trạng thái queue:
+
+```cmd
+curl http://127.0.0.1:8770/health
+```
+
+Xóa các câu đang chờ, không cắt câu đang phát:
+
+```cmd
+curl -X POST http://127.0.0.1:8770/clear
+```
+
+Test nhanh:
+
+```cmd
+test_live_tts.bat
 ```
 
 ## Voice Library trên trình duyệt
 
-Trên chính máy chủ:
+Trên máy chủ:
 
 ```text
 http://127.0.0.1:8766
@@ -64,96 +160,69 @@ Ví dụ:
 http://192.168.1.20:8766
 ```
 
-Xem IP máy chủ bằng:
+Xem IP bằng `ipconfig`. Nếu Windows Firewall chặn port 8766, chạy `allow_lan_firewall.bat` bằng **Run as administrator**.
 
-```cmd
-ipconfig
-```
-
-Tìm dòng `IPv4 Address` của card mạng đang dùng.
-
-Web Library có:
-
-- tự quét toàn bộ WAV/MP3/FLAC/OGG/M4A/AAC trong thư mục audio;
-- tìm kiếm theo tên file/thư mục;
-- sắp xếp mới nhất, cũ nhất, A-Z;
-- phát từng file bằng audio player của trình duyệt;
-- `Phát tất cả` theo danh sách hiện đang lọc;
-- nút Refresh để thấy file mới mà không cần restart server;
-- tải file về máy client.
-
-Mặc định Library quét:
-
-```text
-<repo>\outputs
-```
-
-Nếu muốn quét thêm các thư mục audio cũ trên PC, đặt nhiều root cách nhau bằng dấu `;` trước khi chạy:
+Library mặc định quét `<repo>\outputs`. Có thể thêm nhiều thư mục:
 
 ```cmd
 set VOICE_LIBRARY_ROOTS=C:\Users\duong\Desktop\tts\outputs;D:\voice;D:\truyen_audio
 start_library.bat
 ```
 
-Server chỉ cho đọc các file audio nằm bên trong các root đã cấu hình.
+## Tạo voice WAV nhanh
 
-## Nếu điện thoại không mở được cổng 8766
-
-Đảm bảo hai thiết bị cùng LAN/Wi-Fi. Sau đó chạy:
-
-```cmd
-allow_lan_firewall.bat
-```
-
-bằng **Run as administrator**. Rule chỉ mở TCP port 8766 cho profile mạng Private.
-
-## Tạo voice nhanh
-
-Khi TTS server 8765 đã chạy:
+Khi TTS server 8765 đang chạy:
 
 ```cmd
 .venv\Scripts\python.exe noi.py "Đừng mở cánh cửa đó."
 ```
 
-Không chỉ định `--output` thì file tự vào `outputs\` với tên timestamp, vì vậy Voice Library sẽ thấy ngay sau khi Refresh.
-
-Có thể chọn giọng/style:
+Chọn voice/style:
 
 ```cmd
 .venv\Scripts\python.exe noi.py "Đêm hôm đó, tôi nghe thấy tiếng bước chân." --voice "Minh Đức" --style doc_truyen
 ```
 
-Hoặc chỉ định file riêng:
-
-```cmd
-.venv\Scripts\python.exe noi.py "Xin chào" --output outputs\test.wav
-```
-
-Danh sách voice preset:
+Danh sách preset:
 
 ```cmd
 curl http://127.0.0.1:8765/voices
 ```
 
-## Tạo cả truyện
+## Tạo truyện
+
+Kịch bản thường:
 
 ```cmd
-.venv\Scripts\python.exe tao_truyen.py examples\truyen_mau.txt
+.venv\Scripts\python.exe tao_truyen.py truyen.txt
 ```
 
-Nếu bỏ `--output`, file hoàn chỉnh và các segment đều nằm trong `outputs\`, nên web Library có thể phát cả bản hoàn chỉnh lẫn từng đoạn.
+Kịch bản nhiều giọng:
 
-Có thể chỉ định tên file:
+```text
+[NARRATOR]
+Đêm đó, Nam trở về căn nhà cũ.
+
+[NAM]
+Có ai ở trong đó không?
+
+[NU]
+Anh... cuối cùng anh cũng quay lại.
+```
+
+Chạy:
 
 ```cmd
-.venv\Scripts\python.exe tao_truyen.py truyen.txt --output outputs\truyen_ma.wav
+.venv\Scripts\python.exe tao_truyen.py examples\kich_ban_nam_nu.txt
 ```
+
+Cấu hình giọng nằm trong `voice_roles.json`.
 
 ## TTS API
 
 ### `GET /health`
 
-Kiểm tra server/model.
+Kiểm tra model và khả năng streaming.
 
 ### `GET /voices`
 
@@ -161,19 +230,11 @@ Danh sách voice preset.
 
 ### `POST /tts`
 
-```json
-{
-  "text": "Đêm hôm đó... tôi tỉnh giấc lúc ba giờ sáng.",
-  "voice": null,
-  "style": "doc_truyen",
-  "temperature": 0.78,
-  "top_k": 25,
-  "top_p": 0.93,
-  "max_chars": 200
-}
-```
+Tạo xong toàn bộ câu rồi trả `audio/wav`. Dùng cho lưu file/truyện.
 
-Phản hồi là `audio/wav`.
+### `POST /tts/stream`
+
+Sinh và trả audio từng chunk dưới dạng PCM16 realtime. Dùng cho live/chatbot/tương tác.
 
 ## Cấu hình TTS server
 
@@ -186,31 +247,39 @@ set TTS_WARMUP=1
 start_tts.bat
 ```
 
-Chất lượng cao hơn trên CPU:
+CPU chất lượng cao hơn nhưng chậm hơn:
 
 ```cmd
 set TTS_PRECISION=fp32
 start_tts.bat
 ```
 
-## Cấu hình Voice Library
+## Cấu hình Live TTS Queue
 
-Các biến hỗ trợ:
+Mặc định:
 
-- `VOICE_LIBRARY_HOST` — mặc định `0.0.0.0`.
-- `VOICE_LIBRARY_PORT` — mặc định `8766`.
-- `VOICE_LIBRARY_MAX_FILES` — mặc định `5000`.
-- `VOICE_LIBRARY_ROOTS` — danh sách thư mục quét, cách nhau bằng `;`; mặc định là `<repo>\outputs`.
+```cmd
+set LIVE_TTS_HOST=127.0.0.1
+set LIVE_TTS_PORT=8770
+set LIVE_TTS_SERVER=http://127.0.0.1:8765
+start_live_tts.bat
+```
 
-## Chạy thường trực cùng Windows
+`LIVE_TTS_HOST=127.0.0.1` cố ý chỉ cho phần mềm trên chính PC truy cập. Chỉ đổi sang `0.0.0.0` nếu thật sự cần nhận text từ máy khác trong LAN và đã kiểm soát firewall.
 
-Sau khi đã cài `.venv`:
+## Chạy cùng Windows
 
 ```cmd
 install_autostart.bat
 ```
 
-Từ lần đăng nhập tiếp theo sẽ tự chạy cả cổng 8765 và 8766.
+Từ lần đăng nhập tiếp theo, `start_all.bat` sẽ bật:
+
+```text
+8765 TTS API
+8766 Voice Library
+8770 Live TTS Queue
+```
 
 Gỡ:
 
@@ -220,15 +289,17 @@ remove_autostart.bat
 
 ## Warm-up và chất lượng
 
-Server TTS mặc định warm-up một câu khi khởi động để giảm nguy cơ méo ở lần infer đầu tiên. Preset sampling mặc định:
+Mặc định:
 
-- `temperature = 0.78`
-- `top_k = 25`
-- `top_p = 0.93`
-- `max_chars = 200`
+```text
+temperature = 0.78
+top_k       = 25
+top_p       = 0.93
+max_chars   = 200
+```
 
-Nếu cần ổn định hơn, giảm `temperature` về khoảng `0.70–0.75`. Tăng temperature có thể biểu cảm hơn nhưng độ ổn định giảm.
+Nếu cần ổn định hơn, thử giảm `temperature` về `0.70–0.75`.
 
 ## File nặng
 
-Repo không commit model, `.venv`, cache Hugging Face, `outputs` hay audio sinh ra. Toàn bộ audio vẫn nằm trên PC của bạn.
+Repo không commit model, `.venv`, cache Hugging Face, `outputs` hoặc audio sinh ra. Audio vẫn nằm trên PC.
