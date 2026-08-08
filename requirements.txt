@@ -1,0 +1,6 @@
+vieneu
+fastapi
+uvicorn[standard]
+requests
+numpy
+soundfile
