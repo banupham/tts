@@ -14,12 +14,15 @@ set "LAUNCHER=%STARTUP%\VieNeuTTS.cmd"
 
 > "%LAUNCHER%" echo @echo off
 >> "%LAUNCHER%" echo cd /d "%~dp0"
->> "%LAUNCHER%" echo start "VieNeu TTS" /min "%~dp0start_tts.bat"
+>> "%LAUNCHER%" echo call "%~dp0start_all.bat"
 
 echo.
 echo Da cai tu khoi dong cung Windows:
 echo   %LAUNCHER%
 echo.
-echo Server se duoc mo thu nho khi ban dang nhap Windows.
+echo Khi dang nhap Windows se khoi dong:
+echo   - TTS API: port 8765
+echo   - Voice Library LAN: port 8766
+echo.
 echo Muon go bo: chay remove_autostart.bat
 pause
