@@ -18,4 +18,4 @@ jobs:
           python-version: "3.12"
 
       - name: Compile Python files
-        run: python -m py_compile tts_server.py voice_library_server.py noi.py tao_truyen.py
+        run: python -m py_compile tts_server.py voice_library_server.py live_tts.py noi.py tao_truyen.py
