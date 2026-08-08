@@ -24,6 +24,7 @@ echo Khi dang nhap Windows se khoi dong:
 echo   - TTS API: port 8765
 echo   - Voice Library LAN: port 8766
 echo   - Live TTS Queue: port 8770
+echo   - Live TTS Web: port 8771
 echo.
 echo Muon go bo: chay remove_autostart.bat
 pause
