@@ -2,6 +2,8 @@
 
 Dịch vụ TTS tiếng Việt chạy local bằng VieNeu-TTS, thiết kế để model được nạp một lần và giữ thường trực trong RAM. Các chương trình khác có thể gọi HTTP API để tạo WAV, xem danh sách giọng, hoặc tạo truyện dài theo từng đoạn.
 
+Phiên bản VieNeu đang pin trong repo: `vieneu==3.2.4`.
+
 ## Thành phần
 
 - `tts_server.py` — server FastAPI thường trực tại `127.0.0.1:8765`
@@ -9,8 +11,12 @@ Dịch vụ TTS tiếng Việt chạy local bằng VieNeu-TTS, thiết kế đ�
 - `tao_truyen.py` — chia truyện dài thành các đoạn tự nhiên, tạo từng WAV rồi ghép lại
 - `requirements.txt` — thư viện Python cần cài
 - `install_windows.bat` — tạo `.venv` và cài thư viện trên Windows
-- `start_tts.bat` — khởi động server bằng `.venv` mà không cần activate thủ công
+- `start_tts.bat` — khởi động server bằng `.venv`, không cần activate thủ công
+- `test_tts.bat` — test nhanh server và tạo `test_output.wav`
+- `install_autostart.bat` — tự chạy TTS khi đăng nhập Windows
+- `remove_autostart.bat` — gỡ tự khởi động
 - `examples/truyen_mau.txt` — văn bản mẫu để test
+- `.github/workflows/syntax-check.yml` — kiểm tra cú pháp Python trên GitHub Actions
 
 ## Cài nhanh trên Windows
 
@@ -36,9 +42,31 @@ TTS SERVER READY: http://127.0.0.1:8765
 
 Giữ cửa sổ server mở. Model chỉ được nạp một lần khi server khởi động.
 
+## Chạy thường trực cùng Windows
+
+Sau khi đã cài `.venv`, chạy một lần:
+
+```cmd
+install_autostart.bat
+```
+
+Từ lần đăng nhập Windows tiếp theo, `start_tts.bat` sẽ tự chạy ở trạng thái thu nhỏ.
+
+Muốn gỡ:
+
+```cmd
+remove_autostart.bat
+```
+
 ## Test server
 
-Mở trình duyệt:
+Cách nhanh nhất:
+
+```cmd
+test_tts.bat
+```
+
+Hoặc mở:
 
 ```text
 http://127.0.0.1:8765/docs
@@ -90,10 +118,10 @@ Script sẽ:
 1. Chia văn bản theo đoạn/câu tự nhiên.
 2. Gửi từng đoạn tới server.
 3. Lưu riêng từng segment trong thư mục `<ten_output>_segments`.
-4. Ghép bằng `soundfile` sau khi kiểm tra sample rate/channel.
+4. Đọc WAV bằng `soundfile`, kiểm tra sample rate và ghép bằng NumPy.
 5. Chèn khoảng nghỉ giữa các đoạn.
 
-Nếu một đoạn đọc chưa đạt, bạn có thể nghe file segment tương ứng và tạo lại riêng đoạn đó thay vì dựng lại cả truyện.
+Nếu một đoạn đọc chưa đạt, nghe file segment tương ứng rồi tạo lại riêng đoạn đó thay vì dựng lại cả truyện.
 
 ## API
 
@@ -125,7 +153,7 @@ Phản hồi là `audio/wav`.
 
 ## Cấu hình server bằng biến môi trường
 
-Mặc định server dùng CPU/ONNX int8 để nhẹ và nhanh.
+Mặc định server dùng CPU/ONNX int8 để nhẹ và nhanh:
 
 ```cmd
 set TTS_HOST=127.0.0.1
