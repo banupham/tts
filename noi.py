@@ -2,6 +2,7 @@ import argparse
 import os
 import sys
 import time
+from datetime import datetime
 from pathlib import Path
 
 import requests
@@ -12,6 +13,16 @@ try:
     sys.stderr.reconfigure(encoding="utf-8")
 except Exception:
     pass
+
+
+BASE_DIR = Path(__file__).resolve().parent
+DEFAULT_OUTPUT_DIR = BASE_DIR / "outputs"
+
+
+def default_output_path() -> Path:
+    DEFAULT_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    stamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")[:-3]
+    return DEFAULT_OUTPUT_DIR / f"voice_{stamp}.wav"
 
 
 def main() -> int:
@@ -28,7 +39,11 @@ def main() -> int:
     parser.add_argument("--top-k", type=int, default=25)
     parser.add_argument("--top-p", type=float, default=0.93)
     parser.add_argument("--max-chars", type=int, default=200)
-    parser.add_argument("--output", default="output.wav")
+    parser.add_argument(
+        "--output",
+        default=None,
+        help="File WAV đầu ra. Bỏ trống để tự lưu vào outputs\\voice_<timestamp>.wav",
+    )
     parser.add_argument("--play", action="store_true", help="Mở file sau khi tạo trên Windows")
     args = parser.parse_args()
 
@@ -64,7 +79,9 @@ def main() -> int:
             pass
         return 1
 
-    output = Path(args.output)
+    output = Path(args.output) if args.output else default_output_path()
+    if not output.is_absolute():
+        output = Path.cwd() / output
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_bytes(response.content)
 
