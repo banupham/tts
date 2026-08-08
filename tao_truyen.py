@@ -3,6 +3,7 @@ import io
 import re
 import sys
 import time
+from datetime import datetime
 from pathlib import Path
 from typing import Iterable
 
@@ -18,7 +19,15 @@ except Exception:
     pass
 
 
+BASE_DIR = Path(__file__).resolve().parent
+DEFAULT_OUTPUT_DIR = BASE_DIR / "outputs"
 SENTENCE_SPLIT_RE = re.compile(r"(?<=[.!?…])\s+")
+
+
+def default_story_output() -> Path:
+    DEFAULT_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    return DEFAULT_OUTPUT_DIR / f"truyen_{stamp}.wav"
 
 
 def _split_long_piece(text: str, max_chars: int) -> list[str]:
@@ -30,7 +39,6 @@ def _split_long_piece(text: str, max_chars: int) -> list[str]:
 
     sentences = [s.strip() for s in SENTENCE_SPLIT_RE.split(text) if s.strip()]
     if len(sentences) == 1:
-        # Fallback theo dấu phẩy/chấm phẩy nếu câu quá dài.
         sentences = [s.strip() for s in re.split(r"(?<=[,;:])\s+", text) if s.strip()]
 
     chunks: list[str] = []
@@ -41,7 +49,6 @@ def _split_long_piece(text: str, max_chars: int) -> list[str]:
             if current:
                 chunks.append(current)
                 current = ""
-            # Trường hợp đặc biệt: một câu vẫn quá dài, cắt mềm theo khoảng trắng.
             words = sentence.split()
             part = ""
             for word in words:
@@ -74,11 +81,9 @@ def split_story(text: str, max_chars: int) -> list[str]:
     pieces: list[str] = []
 
     for paragraph in paragraphs:
-        # Gộp newline đơn bên trong một đoạn thành khoảng trắng.
         paragraph = re.sub(r"\s*\n\s*", " ", paragraph).strip()
         pieces.extend(_split_long_piece(paragraph, max_chars))
 
-    # Gộp các piece rất ngắn với piece sau/trước để tránh model nhận quá ít ngữ cảnh.
     merged: list[str] = []
     min_chars = min(70, max_chars // 3)
 
@@ -164,7 +169,6 @@ def concatenate_with_pause(
     if not parts:
         return np.array([], dtype=np.float32)
 
-    # Không cần khoảng nghỉ thừa ở cuối file.
     if parts and parts[-1] is silence:
         parts.pop()
 
@@ -174,7 +178,11 @@ def concatenate_with_pause(
 def main() -> int:
     parser = argparse.ArgumentParser(description="Tạo voice cho truyện dài bằng VieNeu local server")
     parser.add_argument("input", help="File TXT UTF-8 chứa truyện")
-    parser.add_argument("--output", default="truyen_ma.wav")
+    parser.add_argument(
+        "--output",
+        default=None,
+        help="File đầu ra. Bỏ trống để tự lưu vào outputs\\truyen_<timestamp>.wav",
+    )
     parser.add_argument("--server", default="http://127.0.0.1:8765")
     parser.add_argument("--voice", default=None, help="Voice ID; bỏ trống để dùng default")
     parser.add_argument(
@@ -212,8 +220,11 @@ def main() -> int:
     print(f"VieNeu max   : {args.server_max_chars} ký tự")
     print(f"Temperature  : {args.temperature}")
 
-    output_path = Path(args.output)
+    output_path = Path(args.output) if args.output else default_story_output()
+    if not output_path.is_absolute():
+        output_path = Path.cwd() / output_path
     output_path.parent.mkdir(parents=True, exist_ok=True)
+
     segment_dir = output_path.with_suffix("")
     segment_dir = segment_dir.parent / f"{segment_dir.name}_segments"
     segment_dir.mkdir(parents=True, exist_ok=True)
