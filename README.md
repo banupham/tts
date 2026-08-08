@@ -2,11 +2,12 @@
 
 Dịch vụ TTS tiếng Việt chạy local bằng VieNeu-TTS. Model được nạp một lần và giữ thường trực trong RAM.
 
-Hệ thống hiện có 3 dịch vụ:
+Hệ thống hiện có 4 dịch vụ:
 
 - **TTS API** `127.0.0.1:8765` — tạo WAV và stream audio realtime.
 - **Voice Library LAN** `0.0.0.0:8766` — nghe lại audio đã tạo bằng trình duyệt.
 - **Live TTS Queue** `127.0.0.1:8770` — nhận text từ middleware/live, xếp hàng và phát loa realtime.
+- **Live TTS Web** `0.0.0.0:8771` — giao diện web chọn giọng/style/priority và gửi text vào Live TTS Queue.
 
 Phiên bản VieNeu đang pin: `vieneu==3.2.4`.
 
@@ -14,6 +15,7 @@ Phiên bản VieNeu đang pin: `vieneu==3.2.4`.
 
 - `tts_server.py` — TTS server thường trực; `POST /tts` và `POST /tts/stream`.
 - `live_tts.py` — hàng đợi realtime, nhận text và phát PCM stream ra loa.
+- `live_web.py` — giao diện điều khiển Live TTS bằng trình duyệt.
 - `voice_library_server.py` — thư viện audio trên web cho mạng LAN.
 - `noi.py` — tạo nhanh một WAV; mặc định lưu vào `outputs\voice_<timestamp>.wav`.
 - `tao_truyen.py` — tạo truyện dài/multi-voice.
@@ -21,7 +23,8 @@ Phiên bản VieNeu đang pin: `vieneu==3.2.4`.
 - `start_tts.bat` — chạy TTS API.
 - `start_library.bat` — chạy Voice Library.
 - `start_live_tts.bat` — chạy Live TTS Queue.
-- `start_all.bat` — chạy cả 3 dịch vụ.
+- `start_live_web.bat` — chạy giao diện Live TTS Web.
+- `start_all.bat` — chạy cả 4 dịch vụ.
 - `test_live_tts.bat` — gửi thử nhiều câu với priority khác nhau.
 
 ## Cài nhanh trên Windows
@@ -50,7 +53,34 @@ Các cổng local:
 TTS API        http://127.0.0.1:8765
 Voice Library  http://127.0.0.1:8766
 Live TTS Queue http://127.0.0.1:8770
+Live TTS Web   http://127.0.0.1:8771
 ```
+
+## Live TTS Web: chọn giọng trên trình duyệt
+
+Mở trên PC:
+
+```text
+http://127.0.0.1:8771
+```
+
+Hoặc từ điện thoại/máy khác cùng LAN:
+
+```text
+http://IP_MAY_CHU:8771
+```
+
+Trang web tự tải danh sách preset từ TTS server và có các lựa chọn:
+
+- **Giọng nói** — dropdown toàn bộ voice từ `GET /voices`.
+- **Phong cách** — `tu_nhien`, `doc_truyen`, `tin_tuc`.
+- **Priority** — số nhỏ hơn được xếp trước.
+- `temperature`, `top_k`, `top_p`, `max_chars`.
+- ô nhập text và nút **ĐỌC NGAY**.
+- nút **Xóa hàng đợi**.
+- trạng thái đang đọc, số câu trong queue, số câu đã phát và lỗi gần nhất.
+
+Web `8771` chỉ làm giao diện/proxy. Audio vẫn được phát qua loa của PC đang chạy `live_tts.py`.
 
 ## Realtime TTS cho LIVE
 
@@ -160,7 +190,7 @@ Ví dụ:
 http://192.168.1.20:8766
 ```
 
-Xem IP bằng `ipconfig`. Nếu Windows Firewall chặn port 8766, chạy `allow_lan_firewall.bat` bằng **Run as administrator**.
+Xem IP bằng `ipconfig`. Nếu Windows Firewall chặn port 8766 hoặc 8771, cần cho phép các cổng tương ứng trên profile mạng Private.
 
 Library mặc định quét `<repo>\outputs`. Có thể thêm nhiều thư mục:
 
@@ -265,7 +295,17 @@ set LIVE_TTS_SERVER=http://127.0.0.1:8765
 start_live_tts.bat
 ```
 
-`LIVE_TTS_HOST=127.0.0.1` cố ý chỉ cho phần mềm trên chính PC truy cập. Chỉ đổi sang `0.0.0.0` nếu thật sự cần nhận text từ máy khác trong LAN và đã kiểm soát firewall.
+`LIVE_TTS_HOST=127.0.0.1` cố ý chỉ cho phần mềm trên chính PC truy cập. Web `8771` làm proxy nên điện thoại vẫn điều khiển được queue mà không cần mở trực tiếp port 8770 ra LAN.
+
+## Cấu hình Live TTS Web
+
+```cmd
+set LIVE_WEB_HOST=0.0.0.0
+set LIVE_WEB_PORT=8771
+set LIVE_WEB_TTS_SERVER=http://127.0.0.1:8765
+set LIVE_WEB_QUEUE=http://127.0.0.1:8770
+start_live_web.bat
+```
 
 ## Chạy cùng Windows
 
@@ -279,6 +319,7 @@ Từ lần đăng nhập tiếp theo, `start_all.bat` sẽ bật:
 8765 TTS API
 8766 Voice Library
 8770 Live TTS Queue
+8771 Live TTS Web
 ```
 
 Gỡ:
