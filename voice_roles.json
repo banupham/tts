@@ -1,0 +1,17 @@
+{
+  "NARRATOR": {
+    "voice": "Minh Đức",
+    "style": "doc_truyen",
+    "temperature": 0.76
+  },
+  "NAM": {
+    "voice": "Minh Đức",
+    "style": "tu_nhien",
+    "temperature": 0.78
+  },
+  "NU": {
+    "voice": null,
+    "style": "tu_nhien",
+    "temperature": 0.80
+  }
+}
